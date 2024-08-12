@@ -1,5 +1,2 @@
-# Vulnhub-seri
-## Reference
-https://blog.razrsec.uk/basic-pentesting-1-walkthrough/
+This is my repo about vulnhub write-up
 
-https://systemweakness.com/basic-pentesting-1-vulnhub-writeup-40cac0f1f8f4
